@@ -22,13 +22,15 @@ type record struct {
 }
 
 const (
-	rootCgroup      = "/sys/fs/cgroup/unified"
+	rootCgroup      = "/sys/fs/cgroup"
 	ebpfFS          = "/sys/fs/bpf"
 	flowMapName     = "flows_map"
 	blockedMapName  = "blocked_map"
 	bpfCodePath     = "bpf.o"
 	egressProgName  = "egress"
+	egressLinkName  = "egress_cgroup_link"
 	ingressProgName = "ingress"
+	ingressLinkName = "ingress_cgroup_link"
 )
 
 func intToIP(val uint32) net.IP {
@@ -63,7 +65,7 @@ func main() {
 	ingressPinPath := filepath.Join(ebpfFS, ingressProgName)
 	egressPinPath := filepath.Join(ebpfFS, egressProgName)
 
-	cgroup, err := os.Open(rootCgroup)
+	cgroup, err := os.Open(filepath.Join(rootCgroup, "test"))
 	if err != nil {
 		return
 	}
@@ -81,7 +83,8 @@ func main() {
 		egressProg = collec.Programs[egressProgName]
 		egressProg.Pin(egressPinPath)
 
-		_, err := link.AttachCgroup(link.CgroupOptions{
+		fmt.Printf("attaching ingress to cgroup %s\n", cgroup.Name())
+		l, err := link.AttachCgroup(link.CgroupOptions{
 			Path:    cgroup.Name(),
 			Attach:  ebpf.AttachCGroupInetIngress,
 			Program: collec.Programs[ingressProgName],
@@ -90,8 +93,11 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-
-		_, err = link.AttachCgroup(link.CgroupOptions{
+		if err := l.Pin(filepath.Join(ebpfFS, ingressLinkName)); err != nil {
+			panic(err)
+		}
+		fmt.Printf("attaching egress to cgroup %s\n", cgroup.Name())
+		l, err = link.AttachCgroup(link.CgroupOptions{
 			Path:    cgroup.Name(),
 			Attach:  ebpf.AttachCGroupInetEgress,
 			Program: collec.Programs[egressProgName],
@@ -100,12 +106,15 @@ func main() {
 			fmt.Println(err)
 			return
 		}
-
+		if err := l.Pin(filepath.Join(ebpfFS, egressLinkName)); err != nil {
+			panic(err)
+		}
 		outputMap, _ = collec.Maps[flowMapName]
 		outputMap.Pin(flowPinPath)
 
 		blockedMap, _ = collec.Maps[blockedMapName]
 		blockedMap.Pin(blockedPinPath)
+		fmt.Printf("all maps pinned.\n")
 	} else {
 		ingressProg, err = ebpf.LoadPinnedProgram(ingressPinPath, &ebpf.LoadPinOptions{})
 		if err != nil {
@@ -179,6 +188,8 @@ func main() {
 			os.Remove(egressPinPath)
 			os.Remove(flowPinPath)
 			os.Remove(blockedPinPath)
+			os.Remove(filepath.Join(ebpfFS, egressLinkName))
+			os.Remove(filepath.Join(ebpfFS, ingressLinkName))
 		} else if action == "block" && len(os.Args) == 3 {
 			ip := ipToInt(os.Args[2])
 			if err = blockedMap.Put(&ip, &ip); err != nil {
