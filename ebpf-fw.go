@@ -107,23 +107,23 @@ func main() {
 		blockedMap, _ = collec.Maps[blockedMapName]
 		blockedMap.Pin(blockedPinPath)
 	} else {
-		ingressProg, err = ebpf.LoadPinnedProgram(ingressPinPath)
+		ingressProg, err = ebpf.LoadPinnedProgram(ingressPinPath, &ebpf.LoadPinOptions{})
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		egressProg, err = ebpf.LoadPinnedProgram(egressPinPath)
+		egressProg, err = ebpf.LoadPinnedProgram(egressPinPath, &ebpf.LoadPinOptions{})
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		outputMap, err = ebpf.LoadPinnedMap(flowPinPath)
+		outputMap, err = ebpf.LoadPinnedMap(flowPinPath, &ebpf.LoadPinOptions{})
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		blockedMap, err = ebpf.LoadPinnedMap(blockedPinPath)
+		blockedMap, err = ebpf.LoadPinnedMap(blockedPinPath, &ebpf.LoadPinOptions{})
 		if err != nil {
 			fmt.Println(err)
 			return
